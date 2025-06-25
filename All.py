@@ -14,13 +14,23 @@ import PyPDF2
 import docx
 
 # === Load Model, Tokenizer, and Label Encoder for Category Prediction ===
-@st.cache_resource
-def load_model():
-    model = BertForSequenceClassification.from_pretrained("bert_resume_model")
-    tokenizer = BertTokenizerFast.from_pretrained("bert_resume_model")
-    with open(r"C:\Users\MANISH\Desktop\Mini Project\resume_predictionApp\bert_resume_model\label_encoder.pkl", "rb") as f:
-        le = pickle.load(f)
-    return model, tokenizer, le
+# @st.cache_resource
+# def load_model():
+#     model = BertForSequenceClassification.from_pretrained("bert_resume_model")
+#     tokenizer = BertTokenizerFast.from_pretrained("bert_resume_model")
+#     with open(r"C:\Users\MANISH\Desktop\Mini Project\resume_predictionApp\bert_resume_model\label_encoder.pkl", "rb") as f:
+#         le = pickle.load(f)
+#     return model, tokenizer, le
+model = BertForSequenceClassification.from_pretrained("predator279/resume-classifier-model")
+tokenizer = BertTokenizerFast.from_pretrained("predator279/resume-classifier-model")
+
+from huggingface_hub import hf_hub_download
+
+label_encoder_path = hf_hub_download(
+    repo_id="predator279/resume-classifier-model",
+    filename="label_encoder.pkl"
+)
+
 
 # === Text Cleaning Function for Both Categories and Ranking ===
 def clean_text(text):
