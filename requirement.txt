@@ -5,5 +5,4 @@ scikit-learn
 numpy
 PyPDF2
 python-docx
-
 huggingface_hub
