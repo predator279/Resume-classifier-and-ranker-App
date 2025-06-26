@@ -1,3 +1,36 @@
+# import streamlit as st
+# from transformers import BertForSequenceClassification, BertTokenizerFast
+# import torch
+# import pickle
+# import numpy as np
+# import re
+# from sklearn.feature_extraction.text import TfidfVectorizer
+# from sklearn.metrics.pairwise import cosine_similarity
+# from PyPDF2 import PdfReader
+# from docx import Document
+# from io import StringIO
+
+# import PyPDF2
+# import docx
+
+# # === Load Model, Tokenizer, and Label Encoder for Category Prediction ===
+# # @st.cache_resource
+# # def load_model():
+# #     model = BertForSequenceClassification.from_pretrained("bert_resume_model")
+# #     tokenizer = BertTokenizerFast.from_pretrained("bert_resume_model")
+# #     with open(r"C:\Users\MANISH\Desktop\Mini Project\resume_predictionApp\bert_resume_model\label_encoder.pkl", "rb") as f:
+# #         le = pickle.load(f)
+# #     return model, tokenizer, le
+# model = BertForSequenceClassification.from_pretrained("predator279/resume-classifier-model")
+# tokenizer = BertTokenizerFast.from_pretrained("predator279/resume-classifier-model")
+
+# from huggingface_hub import hf_hub_download
+
+# label_encoder_path = hf_hub_download(
+#     repo_id="predator279/resume-classifier-model",
+#     filename="label_encoder.pkl"
+# )
+
 import streamlit as st
 from transformers import BertForSequenceClassification, BertTokenizerFast
 import torch
@@ -9,27 +42,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 from PyPDF2 import PdfReader
 from docx import Document
 from io import StringIO
+from huggingface_hub import hf_hub_download
 
 import PyPDF2
 import docx
 
 # === Load Model, Tokenizer, and Label Encoder for Category Prediction ===
-# @st.cache_resource
-# def load_model():
-#     model = BertForSequenceClassification.from_pretrained("bert_resume_model")
-#     tokenizer = BertTokenizerFast.from_pretrained("bert_resume_model")
-#     with open(r"C:\Users\MANISH\Desktop\Mini Project\resume_predictionApp\bert_resume_model\label_encoder.pkl", "rb") as f:
-#         le = pickle.load(f)
-#     return model, tokenizer, le
-model = BertForSequenceClassification.from_pretrained("predator279/resume-classifier-model")
-tokenizer = BertTokenizerFast.from_pretrained("predator279/resume-classifier-model")
+@st.cache_resource
+def load_model():
+    model = BertForSequenceClassification.from_pretrained("predator279/resume-classifier-model")
+    tokenizer = BertTokenizerFast.from_pretrained("predator279/resume-classifier-model")
+    label_encoder_path = hf_hub_download(
+        repo_id="predator279/resume-classifier-model",
+        filename="label_encoder.pkl"
+    )
+    with open(label_encoder_path, "rb") as f:
+        le = pickle.load(f)
+    return model, tokenizer, le
 
-from huggingface_hub import hf_hub_download
-
-label_encoder_path = hf_hub_download(
-    repo_id="predator279/resume-classifier-model",
-    filename="label_encoder.pkl"
-)
+# ... rest of your code ...
 
 
 # === Text Cleaning Function for Both Categories and Ranking ===
