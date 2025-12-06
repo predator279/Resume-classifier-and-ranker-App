@@ -13,20 +13,24 @@ from io import StringIO
 # import PyPDF2, docx are already imported.
 
 # === Load Model, Tokenizer, and Label Encoder for Category Prediction ===
+from huggingface_hub import hf_hub_download
 @st.cache_resource
 def load_model():
-    model = BertForSequenceClassification.from_pretrained("bert_resume_model")
-    tokenizer = BertTokenizerFast.from_pretrained("bert_resume_model")
+    # --- The REPOSITORY ID from Hugging Face ---
+    MODEL_REPO_ID = "predator279/resume-classifier-model" # <-- **CONFIRM THIS IS YOUR CORRECT REPO ID**
     
-    # CRITICAL FIX: The absolute C:\ path will fail in Codespaces.
-    # You MUST ensure 'label_encoder.pkl' is in the root or the model folder
-    # and use a relative path.
-    try:
-        with open("bert_resume_model/label_encoder.pkl", "rb") as f:
-             le = pickle.load(f)
-    except FileNotFoundError:
-        st.error("Cannot find label_encoder.pkl. Please check its path relative to All.py.")
-        raise
+    # 1. Load Model/Tokenizer from the Hub
+    model = BertForSequenceClassification.from_pretrained(MODEL_REPO_ID)
+    tokenizer = BertTokenizerFast.from_pretrained(MODEL_REPO_ID)
+    
+    # 2. Download and load the custom label encoder (.pkl) from the Hub
+    label_encoder_path = hf_hub_download(
+        repo_id=MODEL_REPO_ID,
+        filename="label_encoder.pkl"
+    )
+    
+    with open(label_encoder_path, "rb") as f:
+        le = pickle.load(f)
         
     return model, tokenizer, le
 
