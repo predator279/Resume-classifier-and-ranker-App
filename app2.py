@@ -17,8 +17,7 @@ from huggingface_hub import hf_hub_download
 @st.cache_resource
 def load_model():
     # --- The REPOSITORY ID from Hugging Face ---
-    MODEL_REPO_ID = "predator279/resume-classifier-model" # <-- **CONFIRM THIS IS YOUR CORRECT REPO ID**
-    
+    MODEL_REPO_ID = "predator279/resume-classifier-model" # <-- **CONFIRM THIS IS YOUR CORRECT REPO ID*
     # 1. Load Model/Tokenizer from the Hub
     model = BertForSequenceClassification.from_pretrained(MODEL_REPO_ID)
     tokenizer = BertTokenizerFast.from_pretrained(MODEL_REPO_ID)
@@ -62,21 +61,24 @@ def extract_text_from_file(file):
         return ""
 
 # === BERT Embedding Function (New) ===
-@st.cache_data(show_spinner=False)
+# === BERT Embedding Function (Updated with hash_funcs) ===
+@st.cache_data(show_spinner=False, hash_funcs={
+    BertForSequenceClassification: lambda _: None, # Ignore model entirely
+    BertTokenizerFast: lambda _: None, # Ignore tokenizer entirely
+    torch.device: lambda device: str(device) # Safely hash the device
+})
 def get_embedding(text, model, tokenizer, device):
     """Generates a fixed-size semantic embedding for a given text using BERT [CLS] token."""
+    # ... (function body remains the same)
     cleaned = clean_text(text)
     if not cleaned:
-        return np.zeros(768) # Default BERT base hidden size
+        return np.zeros(768) 
         
     inputs = tokenizer(cleaned, return_tensors="pt", truncation=True, padding=True, max_length=512)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     
     with torch.no_grad():
-        # output_hidden_states=True is needed to get the CLS token vector
         outputs = model(**inputs, output_hidden_states=True) 
-        
-        # Last hidden state of the [CLS] token (index 0)
         cls_embedding = outputs.hidden_states[-1][:, 0, :] 
         
     return cls_embedding.cpu().numpy().flatten()
