@@ -122,15 +122,98 @@ def predict_category(text, model, tokenizer, le, device, top_k=5):
 
 
 # === Resume Ranking Based on Structured JD and BERT Embeddings (Replaced) ===
+# def rank_resumes_bert(job_structure, job_description_full, uploaded_files, model, tokenizer, device):
+    
+#     # 1. Pre-calculate JD embeddings
+#     jd_emb = get_embedding(job_description_full, model, tokenizer, device)
+    
+#     # 2. Pre-calculate requirement embeddings
+#     for req in job_structure["requirements"]:
+#         req['embedding'] = get_embedding(req["text"], model, tokenizer, device)
+        
+#     resume_scores = []
+    
+#     for file in uploaded_files:
+#         resume_raw = extract_text_from_file(file)
+#         resume_text = clean_text(resume_raw)
+        
+#         # A. Get Resume Embedding
+#         resume_emb = get_embedding(resume_text, model, tokenizer, device)
+        
+#         # B. Calculate Compliance Score (Weighted Requirements Match)
+#         total_weight = sum(req["weight"] for req in job_structure["requirements"])
+#         score_sum = 0.0
+#         hard_fail = False
+#         breakdown = {}
+
+#         for req in job_structure["requirements"]:
+#             # 1. Semantic Similarity (cosine similarity between requirement text and full resume)
+#             sim_raw = cosine_similarity(req['embedding'].reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
+#             # Normalize [-1, 1] to [0, 1] for scoring
+#             sim = max(0.0, min((sim_raw + 1) / 2, 1.0)) 
+
+#             # 2. Skill Coverage (only for skill type)
+#             coverage = 1.0
+#             if req["type"] == "skill":
+#                 coverage = get_skill_coverage(req["text"], resume_text)
+
+#             # 3. Combine: 70% Semantic Match + 30% Keyword Coverage (tuneable)
+#             req_score = 0.7 * sim + 0.3 * coverage
+            
+#             # Hard Rule Check: If must-have score is low
+#             if req.get("must_have", False) and req_score < 0.4: 
+#                 hard_fail = True
+            
+#             score_sum += req["weight"] * req_score
+#             breakdown[req["type"]] = {"score": req_score, "text": req["text"]}
+
+#         comp_score = score_sum / max(1e-6, total_weight)
+        
+#         # Apply Hard Filter Cap
+#         if hard_fail:
+#             comp_score = min(comp_score, 0.45) # Cap at 45% if must-haves are critically missing
+
+#         # C. Global Semantic Similarity
+#         global_sim_raw = cosine_similarity(jd_emb.reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
+#         global_sim = max(0.0, min((global_sim_raw + 1) / 2, 1.0))
+
+#         # D. Final Score (0.4 Global Match + 0.6 Compliance)
+#         alpha = 0.4  
+#         beta  = 0.6  
+#         final_score = alpha * global_sim + beta * comp_score
+        
+#         resume_scores.append({
+#             "name": file.name,
+#             "final_score": round(final_score * 100, 2), # 0-100 score
+#             "global_sim": global_sim,
+#             "compliance_score": comp_score,
+#             "breakdown": breakdown
+#         })
+
+#     # Rank and sort by final_score
+#     ranked_list = sorted(resume_scores, key=lambda x: x["final_score"], reverse=True)
+#     return ranked_list
+
+# === Resume Ranking Based on Structured JD and BERT Embeddings (Replaced) ===
 def rank_resumes_bert(job_structure, job_description_full, uploaded_files, model, tokenizer, device):
     
-    # 1. Pre-calculate JD embeddings
+    # 1. NEW LOGIC: Filter out requirements with empty text
+    valid_requirements = []
+    for req in job_structure["requirements"]:
+        if req["text"].strip(): # Only include if text is not empty
+            req['embedding'] = get_embedding(req["text"], model, tokenizer, device)
+            valid_requirements.append(req)
+    
+    # Check if there are any requirements left to process
+    if not valid_requirements:
+        # Fallback to a single requirement for global matching, or just return 0s
+        # Given we check job_description_full later, we assume full text is available.
+        st.warning("No structured requirements were entered. Calculating score based only on Global JD Match.")
+        # Proceed, but total_weight will be 0, handled below.
+
+    # Pre-calculate JD embeddings for global match
     jd_emb = get_embedding(job_description_full, model, tokenizer, device)
     
-    # 2. Pre-calculate requirement embeddings
-    for req in job_structure["requirements"]:
-        req['embedding'] = get_embedding(req["text"], model, tokenizer, device)
-        
     resume_scores = []
     
     for file in uploaded_files:
@@ -140,47 +223,55 @@ def rank_resumes_bert(job_structure, job_description_full, uploaded_files, model
         # A. Get Resume Embedding
         resume_emb = get_embedding(resume_text, model, tokenizer, device)
         
+        # C. Global Semantic Similarity (Calculated first, used as fallback)
+        global_sim_raw = cosine_similarity(jd_emb.reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
+        global_sim = max(0.0, min((global_sim_raw + 1) / 2, 1.0))
+        
         # B. Calculate Compliance Score (Weighted Requirements Match)
-        total_weight = sum(req["weight"] for req in job_structure["requirements"])
+        total_weight = sum(req["weight"] for req in valid_requirements)
         score_sum = 0.0
         hard_fail = False
         breakdown = {}
-
-        for req in job_structure["requirements"]:
-            # 1. Semantic Similarity (cosine similarity between requirement text and full resume)
-            sim_raw = cosine_similarity(req['embedding'].reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
-            # Normalize [-1, 1] to [0, 1] for scoring
-            sim = max(0.0, min((sim_raw + 1) / 2, 1.0)) 
-
-            # 2. Skill Coverage (only for skill type)
-            coverage = 1.0
-            if req["type"] == "skill":
-                coverage = get_skill_coverage(req["text"], resume_text)
-
-            # 3. Combine: 70% Semantic Match + 30% Keyword Coverage (tuneable)
-            req_score = 0.7 * sim + 0.3 * coverage
-            
-            # Hard Rule Check: If must-have score is low
-            if req.get("must_have", False) and req_score < 0.4: 
-                hard_fail = True
-            
-            score_sum += req["weight"] * req_score
-            breakdown[req["type"]] = {"score": req_score, "text": req["text"]}
-
-        comp_score = score_sum / max(1e-6, total_weight)
         
-        # Apply Hard Filter Cap
-        if hard_fail:
-            comp_score = min(comp_score, 0.45) # Cap at 45% if must-haves are critically missing
+        # CRITICAL FIX: Handle case where ALL structured fields are empty
+        if total_weight == 0:
+            comp_score = global_sim  # If no requirements, compliance is based on global match
+            final_score = global_sim # Final score is just global match
+            
+            # Populate breakdown with a generic entry for display
+            breakdown['Global'] = {"score": global_sim, "text": "Score based only on Global JD Match"}
+            
+        else: # Normal calculation
+            for req in valid_requirements:
+                # 1. Semantic Similarity
+                sim_raw = cosine_similarity(req['embedding'].reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
+                sim = max(0.0, min((sim_raw + 1) / 2, 1.0)) 
 
-        # C. Global Semantic Similarity
-        global_sim_raw = cosine_similarity(jd_emb.reshape(1, -1), resume_emb.reshape(1, -1))[0][0]
-        global_sim = max(0.0, min((global_sim_raw + 1) / 2, 1.0))
+                # 2. Skill Coverage
+                coverage = 1.0
+                if req["type"] == "skill":
+                    coverage = get_skill_coverage(req["text"], resume_text)
 
-        # D. Final Score (0.4 Global Match + 0.6 Compliance)
-        alpha = 0.4  
-        beta  = 0.6  
-        final_score = alpha * global_sim + beta * comp_score
+                # 3. Combine
+                req_score = 0.7 * sim + 0.3 * coverage
+                
+                # Hard Rule Check
+                if req.get("must_have", False) and req_score < 0.4: 
+                    hard_fail = True
+                
+                score_sum += req["weight"] * req_score
+                breakdown[req["type"]] = {"score": req_score, "text": req["text"]}
+
+            comp_score = score_sum / total_weight
+            
+            # Apply Hard Filter Cap
+            if hard_fail:
+                comp_score = min(comp_score, 0.45) 
+                
+            # D. Final Score
+            alpha = 0.4  
+            beta  = 0.6  
+            final_score = alpha * global_sim + beta * comp_score
         
         resume_scores.append({
             "name": file.name,
@@ -229,10 +320,74 @@ if mode == "Resume Category Prediction":
             st.error("❌ Unsupported file type or empty content.")
 
 # Ranking Mode - UPDATED
+# elif mode == "Resume Ranking":
+#     st.subheader("Resume Ranking (Hybrid BERT Score)")
+    
+#     st.markdown("##### 📝 Structured Job Requirements")
+    
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         job_description_skills = st.text_area("Required Skills (Must-Have, e.g., Python, SQL, AWS)", height=100)
+#     with col2:
+#         job_description_experience = st.text_area("Min. Experience/Keywords (e.g., 2+ years data science)", height=100)
+    
+#     job_description_education = st.text_input("Education (e.g., B.Tech CS or related)", value="Relevant degree required")
+#     job_description_other = st.text_area("Other JD Text (for Global Matching)", height=100)
+    
+#     uploaded_resumes = st.file_uploader("📄 Upload Resumes", type=["pdf", "docx", "txt"], accept_multiple_files=True)
+
+#     # --- Construct Job Structure ---
+#     job_structure = {
+#       "requirements": [
+#         {"type": "skill", "text": job_description_skills, "weight": 0.40, "must_have": True},
+#         {"type": "experience", "text": job_description_experience, "weight": 0.35, "must_have": False},
+#         {"type": "education", "text": job_description_education, "weight": 0.25, "must_have": False},
+#       ]
+#     }
+#     job_description_full = f"Skills: {job_description_skills}. Experience: {job_description_experience}. Education: {job_description_education}. Other: {job_description_other}"
+
+
+#     if st.button("🚀 Rank Resumes") and job_description_full and uploaded_resumes:
+#         # Load model and set device
+#         model, tokenizer, le = load_model()
+#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         model.to(device)
+#         model.eval()
+
+#         # Call the new BERT-based ranker
+#         with st.spinner("Processing Resumes..."):
+#             ranked_results = rank_resumes_bert(job_structure, job_description_full, uploaded_resumes, model, tokenizer, device)
+
+#         st.subheader("📊 Ranked Resumes:")
+        
+#         for rank, result in enumerate(ranked_results):
+#             score_color = "green" if result['final_score'] > 75 else ("orange" if result['final_score'] > 50 else "red")
+            
+#             st.markdown(
+#                 f"**{rank + 1}. {result['name']}** — **Total Match Score: <span style='color:{score_color}; font-size: 1.2em;'>{result['final_score']:.2f} / 100</span>**", 
+#                 unsafe_allow_html=True
+#             )
+            
+#             with st.expander(f"🔍 Detailed Score Breakdown for {result['name']}"):
+#                 st.write(f"**Global JD Match (BERT Semantic Similarity):** {result['global_sim']:.4f}")
+#                 st.write(f"**Weighted Requirement Compliance:** {result['compliance_score']:.4f}")
+#                 st.markdown("---")
+#                 st.markdown("**Requirement-Specific Scores (Compliance Breakdown):**")
+                
+#                 for req_type, req_data in result['breakdown'].items():
+#                     icon = "✅" if req_data['score'] > 0.7 else ("⚠️" if req_data['score'] > 0.45 else "❌")
+                    
+#                     # Displaying the first 70 characters of the requirement text
+#                     req_display = req_data['text'][:70].replace('\n', ' ') + "..."
+                    
+#                     st.markdown(f"{icon} **{req_type.capitalize()}** (`{req_display}`): **{req_data['score']:.4f}**")
+
+# Ranking Mode - UPDATED
 elif mode == "Resume Ranking":
     st.subheader("Resume Ranking (Hybrid BERT Score)")
     
-    st.markdown("##### 📝 Structured Job Requirements")
+    # --- Input Fields ---
+    st.markdown("##### 📝 Structured Job Requirements (Must be filled to calculate Compliance Score)")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -240,7 +395,7 @@ elif mode == "Resume Ranking":
     with col2:
         job_description_experience = st.text_area("Min. Experience/Keywords (e.g., 2+ years data science)", height=100)
     
-    job_description_education = st.text_input("Education (e.g., B.Tech CS or related)", value="Relevant degree required")
+    job_description_education = st.text_input("Education (e.g., B.Tech CS or related)", value="") # Default to empty for strict scoring
     job_description_other = st.text_area("Other JD Text (for Global Matching)", height=100)
     
     uploaded_resumes = st.file_uploader("📄 Upload Resumes", type=["pdf", "docx", "txt"], accept_multiple_files=True)
@@ -253,40 +408,53 @@ elif mode == "Resume Ranking":
         {"type": "education", "text": job_description_education, "weight": 0.25, "must_have": False},
       ]
     }
-    job_description_full = f"Skills: {job_description_skills}. Experience: {job_description_experience}. Education: {job_description_education}. Other: {job_description_other}"
+    # Create the full JD text. Use only the general text if structured is empty.
+    
+    # CRITICAL: We need a core JD text for the Global Match.
+    # The Global Match will now be based primarily on the 'other' field if all others are empty.
+    job_description_full = f"{job_description_skills} {job_description_experience} {job_description_education} {job_description_other}"
+    
+    # Use a simpler, non-structured JD text for a final check of content
+    core_jd_text = job_description_full.strip()
 
+    if st.button("🚀 Rank Resumes"):
+        # NEW VALIDATION
+        if not uploaded_resumes:
+            st.error("❌ Please upload at least one resume.")
+        elif not core_jd_text:
+            st.error("❌ The Job Description is empty. Please enter requirements or general JD text.")
+        else:
+            # Load model and set device
+            model, tokenizer, le = load_model()
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model.to(device)
+            model.eval()
 
-    if st.button("🚀 Rank Resumes") and job_description_full and uploaded_resumes:
-        # Load model and set device
-        model, tokenizer, le = load_model()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        model.eval()
+            # Call the new BERT-based ranker
+            with st.spinner("Processing Resumes..."):
+                # Pass the constructed structure and the full text
+                ranked_results = rank_resumes_bert(job_structure, core_jd_text, uploaded_resumes, model, tokenizer, device)
 
-        # Call the new BERT-based ranker
-        with st.spinner("Processing Resumes..."):
-            ranked_results = rank_resumes_bert(job_structure, job_description_full, uploaded_resumes, model, tokenizer, device)
-
-        st.subheader("📊 Ranked Resumes:")
-        
-        for rank, result in enumerate(ranked_results):
-            score_color = "green" if result['final_score'] > 75 else ("orange" if result['final_score'] > 50 else "red")
+            st.subheader("📊 Ranked Resumes:")
             
-            st.markdown(
-                f"**{rank + 1}. {result['name']}** — **Total Match Score: <span style='color:{score_color}; font-size: 1.2em;'>{result['final_score']:.2f} / 100</span>**", 
-                unsafe_allow_html=True
-            )
-            
-            with st.expander(f"🔍 Detailed Score Breakdown for {result['name']}"):
-                st.write(f"**Global JD Match (BERT Semantic Similarity):** {result['global_sim']:.4f}")
-                st.write(f"**Weighted Requirement Compliance:** {result['compliance_score']:.4f}")
-                st.markdown("---")
-                st.markdown("**Requirement-Specific Scores (Compliance Breakdown):**")
+            # Display results (no changes here)
+            for rank, result in enumerate(ranked_results):
+                score_color = "green" if result['final_score'] > 75 else ("orange" if result['final_score'] > 50 else "red")
                 
-                for req_type, req_data in result['breakdown'].items():
-                    icon = "✅" if req_data['score'] > 0.7 else ("⚠️" if req_data['score'] > 0.45 else "❌")
+                st.markdown(
+                    f"**{rank + 1}. {result['name']}** — **Total Match Score: <span style='color:{score_color}; font-size: 1.2em;'>{result['final_score']:.2f} / 100</span>**", 
+                    unsafe_allow_html=True
+                )
+                
+                with st.expander(f"🔍 Detailed Score Breakdown for {result['name']}"):
+                    st.write(f"**Global JD Match (BERT Semantic Similarity):** {result['global_sim']:.4f}")
+                    st.write(f"**Weighted Requirement Compliance:** {result['compliance_score']:.4f}")
+                    st.markdown("---")
+                    st.markdown("**Requirement-Specific Scores (Compliance Breakdown):**")
                     
-                    # Displaying the first 70 characters of the requirement text
-                    req_display = req_data['text'][:70].replace('\n', ' ') + "..."
-                    
-                    st.markdown(f"{icon} **{req_type.capitalize()}** (`{req_display}`): **{req_data['score']:.4f}**")
+                    for req_type, req_data in result['breakdown'].items():
+                        icon = "✅" if req_data['score'] > 0.7 else ("⚠️" if req_data['score'] > 0.45 else "❌")
+                        
+                        req_display = req_data['text'][:70].replace('\n', ' ') + "..."
+                        
+                        st.markdown(f"{icon} **{req_type.capitalize()}** (`{req_display}`): **{req_data['score']:.4f}**")
