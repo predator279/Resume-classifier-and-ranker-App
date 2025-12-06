@@ -213,6 +213,32 @@ st.title("🔍 AI-Powered Resume Analyzer")
 # Sidebar for navigation
 mode = st.sidebar.radio("Choose Mode:", ["Resume Category Prediction", "Resume Ranking"])
 
+# # Category Prediction Mode
+# if mode == "Resume Category Prediction":
+#     st.subheader("Resume Category Prediction (BERT)")
+
+#     uploaded_file = st.file_uploader("Upload your resume (.pdf, .txt, .docx)", type=["pdf", "txt", "docx"])
+
+#     if uploaded_file is not None:
+#         # Load all four components
+#         model_cls, tokenizer, le, model_rank = load_model() # <-- UPDATED UNPACKING
+#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         model_cls.to(device) # <-- USE model_cls
+#         model_cls.eval() # <-- USE model_cls
+
+#         # CONSOLIDATED FILE EXTRACTION
+#         resume_text = extract_text_from_file(uploaded_file)
+
+#         if resume_text:
+#             st.subheader("📄 Resume Preview")
+#             st.write(resume_text[:500] + "..." if len(resume_text) > 500 else resume_text)
+
+#             st.subheader("🔮 Top 5 Predicted Categories")
+#             top5 = predict_category(resume_text, model_cls, tokenizer, le, device) # <-- USE model_cls
+#             for i, (label, score) in enumerate(top5, 1):
+#                 st.write(f"**{i}. {label}** — Score: {score:.4f}")
+#         else:
+#             st.error("❌ Unsupported file type or empty content.")
 # Category Prediction Mode
 if mode == "Resume Category Prediction":
     st.subheader("Resume Category Prediction (BERT)")
@@ -221,22 +247,40 @@ if mode == "Resume Category Prediction":
 
     if uploaded_file is not None:
         # Load all four components
-        model_cls, tokenizer, le, model_rank = load_model() # <-- UPDATED UNPACKING
+        model_cls, tokenizer, le, model_rank = load_model() 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model_cls.to(device) # <-- USE model_cls
-        model_cls.eval() # <-- USE model_cls
+        model_cls.to(device)
+        model_cls.eval()
 
         # CONSOLIDATED FILE EXTRACTION
-        resume_text = extract_text_from_file(uploaded_file)
+        resume_text_raw = extract_text_from_file(uploaded_file) # <-- Use RAW text for cleaner preview
+        resume_text_cleaned = clean_text(resume_text_raw) # <-- Use CLEANED text for prediction
 
-        if resume_text:
-            st.subheader("📄 Resume Preview")
-            st.write(resume_text[:500] + "..." if len(resume_text) > 500 else resume_text)
-
+        if resume_text_cleaned:
+            
+            # --- 1. Predict Categories (First) ---
             st.subheader("🔮 Top 5 Predicted Categories")
-            top5 = predict_category(resume_text, model_cls, tokenizer, le, device) # <-- USE model_cls
+            top5 = predict_category(resume_text_cleaned, model_cls, tokenizer, le, device)
             for i, (label, score) in enumerate(top5, 1):
                 st.write(f"**{i}. {label}** — Score: {score:.4f}")
+
+            # --- 2. Display Preview (Second) ---
+            st.subheader("📄 Resume Preview (Extracted Text)")
+            
+            # Clean up the raw text for display purposes by collapsing excessive newlines
+            # This is a robust way to handle the PDF/DOCX extraction errors
+            display_text = resume_text_raw
+            display_text = re.sub(r'[\r\n]{2,}', '\n\n', display_text).strip() # Collapse multiple newlines/CRLF into at most two
+            display_text = re.sub(r'[ \t]+', ' ', display_text) # Collapse multiple spaces/tabs
+            
+            # Limit the preview length
+            preview_content = display_text[:1000] # Increased limit for better context
+            if len(display_text) > 1000:
+                preview_content += "\n..."
+
+            # Use st.code() for a neat, pre-formatted text box
+            st.code(preview_content, language="text")
+
         else:
             st.error("❌ Unsupported file type or empty content.")
 
@@ -310,4 +354,5 @@ elif mode == "Resume Ranking":
                         req_display = req_data['text'][:70].replace('\n', ' ') + "..."
                         
                         st.markdown(f"{icon} **{req_type.capitalize()}** (`{req_display}`): **{req_data['score']:.4f}**")
+
 
