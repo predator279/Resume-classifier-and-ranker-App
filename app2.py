@@ -208,7 +208,7 @@ def rank_resumes_bert(job_structure, job_description_full, uploaded_files, model
 
 # === Streamlit UI ===
 st.set_page_config(page_title="Resume Analyzer", layout="centered")
-st.title("🔍 AI-Powered Resume Analyzer PPP")
+st.title("🔍 AI-Powered Resume Analyzer v2")
 
 # Sidebar for navigation
 mode = st.sidebar.radio("Choose Mode:", ["Resume Category Prediction", "Resume Ranking"])
