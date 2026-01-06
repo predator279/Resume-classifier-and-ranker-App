@@ -208,7 +208,7 @@ def rank_resumes_bert(job_structure, job_description_full, uploaded_files, model
 
 # === Streamlit UI ===
 st.set_page_config(page_title="Resume Analyzer", layout="centered")
-st.title("🔍 AI-Powered Resume Analyzer")
+st.title("🔍 AI-Powered Resume Analyzer PPPPP")
 st.write("CUDA available:", torch.cuda.is_available())
 
 if torch.cuda.is_available():
@@ -359,6 +359,7 @@ elif mode == "Resume Ranking":
                         req_display = req_data['text'][:70].replace('\n', ' ') + "..."
                         
                         st.markdown(f"{icon} **{req_type.capitalize()}** (`{req_display}`): **{req_data['score']:.4f}**")
+
 
 
 
